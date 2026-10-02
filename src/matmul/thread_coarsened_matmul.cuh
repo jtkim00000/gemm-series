@@ -59,15 +59,15 @@ __global__ void threadCoarsenedMatmulKernel(
     const int N,
     const int K
 ) {
-    int tx{threadIdx.x};
-    int ty{threadIdx.y};
-    int bx{blockIdx.x};
-    int by{blockIdx.y};
+    int tx{static_cast<int>(threadIdx.x)};
+    int ty{static_cast<int>(threadIdx.y)};
+    int bx{static_cast<int>(blockIdx.x)};
+    int by{static_cast<int>(blockIdx.y)};
 
     constexpr int TILE_WIDTH{BLOCK_SIZE * COARSE_FACTOR};
 
-    int row_start{TILE_WIDTH * by + ty};
-    int col_start{TILE_WIDTH * bx + tx};
+    int row_start{TILE_WIDTH * by + ty * COARSE_FACTOR};
+    int col_start{TILE_WIDTH * bx + tx * COARSE_FACTOR};
 
     __shared__ float Ads[TILE_WIDTH][TILE_WIDTH];
     __shared__ float Bds[TILE_WIDTH][TILE_WIDTH];
@@ -141,14 +141,17 @@ void threadCoarsenedMatmulGPU(
     const int N,
     const int K
 ) {
+
+    constexpr int TILE_WIDTH = BLOCK_SIZE * COARSE_FACTOR;
+
     dim3 dimBlock(
         BLOCK_SIZE, 
         BLOCK_SIZE, 
         1
     );
     dim3 dimGrid(
-        (M + dimBlock.x - 1)/dimBlock.x,
-        (N + dimBlock.y - 1)/dimBlock.y,
+        (M + TILE_WIDTH - 1)/TILE_WIDTH,
+        (N + TILE_WIDTH - 1)/TILE_WIDTH,
         1
     );
 

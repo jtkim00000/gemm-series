@@ -69,10 +69,10 @@ __global__ void tiledMatmulKernel(
     int N,
     int K
 ) {
-    int tx{threadIdx.x};
-    int ty{threadIdx.y};
-    int bx{blockIdx.x};
-    int by{blockIdx.y};
+    int tx{static_cast<int>(threadIdx.x)};
+    int ty{static_cast<int>(threadIdx.y)};
+    int bx{static_cast<int>(blockIdx.x)};
+    int by{static_cast<int>(blockIdx.y)};
 
     int row{TILE_WIDTH * by + ty};
     int col{TILE_WIDTH * bx + tx};
