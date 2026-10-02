@@ -17,43 +17,129 @@
     Thus, C is an M x N matrix
 */
 
-__global__ void maoMatmulKernel(
-    
+template <int BLOCK_SIZE, int COARSE_FACTOR>
+__global__ void memoryAccessOptimizedMatmulKernel(
+    const float* A, 
+    const float* B, 
+    float* C, 
+    const int M, 
+    const int N,
+    const int K
 ) {
+    int tx{static_cast<int>(threadIdx.x)};
+    int ty{static_cast<int>(threadIdx.y)};
+    int bx{static_cast<int>(blockIdx.x)};
+    int by{static_cast<int>(blockIdx.y)};
 
+    constexpr int TILE_WIDTH{BLOCK_SIZE * COARSE_FACTOR};
+
+    int row_start{TILE_WIDTH * by + ty * COARSE_FACTOR};
+    int col_start{TILE_WIDTH * bx + tx * COARSE_FACTOR};
+
+    __shared__ float Ads[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float Bds[TILE_WIDTH][TILE_WIDTH];
+
+    float sums[COARSE_FACTOR*COARSE_FACTOR];  // row-major output sums
+
+    for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
+        for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
+            sums[row_idx * COARSE_FACTOR + col_idx] = 0.0f;
+        }
+    }
+    
+    int row_current{};
+    int col_current{};
+
+    for(int tile_idx{}; tile_idx < ((K + TILE_WIDTH - 1) / TILE_WIDTH); ++tile_idx) {
+
+        for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
+            for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
+
+                row_current = row_start + row_idx;
+                col_current = col_start + col_idx;
+
+                if((row_current < M) && ((tile_idx * TILE_WIDTH + tx * COARSE_FACTOR + col_idx) < K))
+                    Ads[ty * COARSE_FACTOR + row_idx][tx * COARSE_FACTOR + col_idx] = A[row_current * K + tile_idx * TILE_WIDTH + tx * COARSE_FACTOR + col_idx];
+                else
+                    Ads[ty * COARSE_FACTOR + row_idx][tx * COARSE_FACTOR + col_idx] = 0.0f;
+
+                if((col_current < N) && ((tile_idx * TILE_WIDTH + ty * COARSE_FACTOR + row_idx) < K))
+                    Bds[ty * COARSE_FACTOR + row_idx][tx * COARSE_FACTOR + col_idx] = B[(N * (tile_idx * TILE_WIDTH + ty * COARSE_FACTOR + row_idx)) + col_current];
+                else
+                    Bds[ty * COARSE_FACTOR + row_idx][tx * COARSE_FACTOR + col_idx] = 0.0f;
+            }
+        }
+
+        __syncthreads();
+
+
+        for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
+            for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
+
+                for(int i{}; i < TILE_WIDTH; ++i) {
+                    sums[row_idx * COARSE_FACTOR + col_idx] += Ads[ty * COARSE_FACTOR + row_idx][i] * Bds[i][tx * COARSE_FACTOR + col_idx];
+                }
+            }
+        }
+
+        __syncthreads();
+
+    }
+
+    for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
+        for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
+            
+            row_current = row_start + row_idx;
+            col_current = col_start + col_idx;
+
+            if((row_current < M) && (col_current < N))
+                C[row_current * N + col_current] = sums[row_idx * COARSE_FACTOR + col_idx];
+
+        }
+    }
 }
 
-void maoMamultGPU(
-
+template <int BLOCK_SIZE, int COARSE_FACTOR>
+void memoryAccessOptimizedMatmulGPU(
+    const float* A, 
+    const float* B, 
+    float* C, 
+    const int M, 
+    const int N,
+    const int K
 ) {
 
+    constexpr int TILE_WIDTH = BLOCK_SIZE * COARSE_FACTOR;
+
     dim3 dimBlock(
-        blockSize,
-        blockSize,
+        BLOCK_SIZE, 
+        BLOCK_SIZE, 
         1
     );
-
     dim3 dimGrid(
-        (M + dimBlock.x - 1)/dimBlock.x,
-        (N + dimBlock.y - 1)/dimBlock.y,
+        (M + TILE_WIDTH - 1)/TILE_WIDTH,
+        (N + TILE_WIDTH - 1)/TILE_WIDTH,
         1
     );
 
-    maoMatmulKernel<<<dimGrid, dimBlock>>>(
-
+    memoryAccessOptimizedMatmulKernel<BLOCK_SIZE, COARSE_FACTOR><<<dimGrid, dimBlock>>>(
+        A,
+        B,
+        C,
+        M,
+        N,
+        K
     );
 
     cudaError_t err{cudaGetLastError()};
 
     if(err != cudaSuccess)
-        std::cout << "MAO Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
-    
+        std::cout << "Thread Coarsened Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
+
     err = cudaDeviceSynchronize();
 
     if(err != cudaSuccess)
-        std::cout << "MAO Kernel Execution Error: " << cudaGetErrorString(err) << '\n'
+        std::cout << "Thread Coarsened Matmul Kernel Exectution Error: " << cudaGetErrorString(err) << '\n';
 }
-
-
 
 #endif
