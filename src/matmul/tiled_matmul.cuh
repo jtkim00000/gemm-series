@@ -69,13 +69,13 @@ __global__ void tiledMatmulKernel(
     int N,
     int K
 ) {
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int bx = blockIdx.x;
-    int by = blockIdx.y;
+    int tx{threadIdx.x};
+    int ty{threadIdx.y};
+    int bx{blockIdx.x};
+    int by{blockIdx.y};
 
-    int row = blockDim.y * by + ty;
-    int col = blockDim.x * bx + tx;
+    int row{TILE_WIDTH * by + ty};
+    int col{TILE_WIDTH * bx + tx};
 
     __shared__ float Ads[TILE_WIDTH][TILE_WIDTH];
     __shared__ float Bds[TILE_WIDTH][TILE_WIDTH];
@@ -138,7 +138,7 @@ void tiledMatmulGPU(
         K
     );
 
-    cudaError_t err = cudaGetLastError();
+    cudaError_t err{cudaGetLastError()};
 
     if(err != cudaSuccess)
         std::cout << "Tiled Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';

@@ -43,7 +43,7 @@ void maoMamultGPU(
 
     );
 
-    err = cudaGetLastError();
+    cudaError_t err{cudaGetLastError()};
 
     if(err != cudaSuccess)
         std::cout << "MAO Kernel Launch Error: " << cudaGetErrorString(err) << '\n';

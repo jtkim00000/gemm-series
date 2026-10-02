@@ -31,8 +31,8 @@ __global__ void naiveMatmulKernel(
     int K
 ) {
 
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int row{blockIdx.y * blockDim.y + threadIdx.y};
+    int col{blockIdx.x * blockDim.x + threadIdx.x};
 
     if((row >= M) || (col >= N)) 
         return;
@@ -72,7 +72,7 @@ void naiveMatmulGPU(
         K
     );
 
-    cudaError_t err = cudaGetLastError();
+    cudaError_t err{cudaGetLastError()};
 
     if(err != cudaSuccess)
         std::cout << "Naive Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
