@@ -1,0 +1,18 @@
+Using GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Compute capability: 8.9
+cuBLAS initialized successfully
+==================================================
+     General Matrix Multiplication Kernels
+     Experimental throughput analysis
+      - RTX4060 GPU CUDA Kernels
+      - C++17
+     Project by: Jesse Kim
+==================================================
+Shape (M x N x K) Naive (TFLOPS)  Tiled (TFLOPS)  TC (TFLOPS)     MAO (TFLOPS)    cuBLAS (TFLOPS)
+--------------------------------------------------------------------------------------------------
+256x256x256       0.625           0.791           1.823           0.939           2.057
+512x512x512       0.652           0.842           3.272           2.138           5.130
+1024x1024x1024    0.702           1.275           5.249           3.327           8.567
+2048x2048x2048    0.975           1.275           5.529           3.475           9.453
+4096x512x1024     0.968           1.272           5.308           3.427           9.162
+512x4096x2048     0.971           1.274           5.358           3.251           9.542

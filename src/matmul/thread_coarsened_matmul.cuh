@@ -150,8 +150,8 @@ void threadCoarsenedMatmulGPU(
         1
     );
     dim3 dimGrid(
-        (M + TILE_WIDTH - 1)/TILE_WIDTH,
         (N + TILE_WIDTH - 1)/TILE_WIDTH,
+        (M + TILE_WIDTH - 1)/TILE_WIDTH,
         1
     );
 
@@ -168,11 +168,6 @@ void threadCoarsenedMatmulGPU(
 
     if(err != cudaSuccess)
         std::cout << "Thread Coarsened Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
-
-    err = cudaDeviceSynchronize();
-
-    if(err != cudaSuccess)
-        std::cout << "Thread Coarsened Matmul Kernel Exectution Error: " << cudaGetErrorString(err) << '\n';
 }
 
 #endif

@@ -46,17 +46,17 @@ __global__ void naiveMatmulKernel(
     C[row * N + col] = sum;
 }
 
+template <int BLOCK_SIZE>
 void naiveMatmulGPU(
     const float* A, 
     const float* B, 
     float* C, 
     int M, 
     int N,
-    int K,
-    int blockSize
+    int K
 ) {
     
-    dim3 dimBlock(blockSize, blockSize, 1);
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE, 1);
     dim3 dimGrid(
         (N + dimBlock.x - 1) / dimBlock.x, 
         (M + dimBlock.y - 1) / dimBlock.y,
@@ -76,11 +76,6 @@ void naiveMatmulGPU(
 
     if(err != cudaSuccess)
         std::cout << "Naive Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
-
-    err = cudaDeviceSynchronize();
-
-    if(err != cudaSuccess)
-        std::cout << "Naive Matmul Kernel Execution Error: " << cudaGetErrorString(err) << '\n';
 
 }
 

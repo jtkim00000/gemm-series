@@ -142,12 +142,6 @@ void tiledMatmulGPU(
 
     if(err != cudaSuccess)
         std::cout << "Tiled Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
-
-    err = cudaDeviceSynchronize();
-
-    if(err != cudaSuccess)
-        std::cout << "Tiled Matmul Kernel Execution Error: " << cudaGetErrorString(err) << '\n';
-
 }
 
 #endif
