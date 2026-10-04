@@ -1,4 +1,4 @@
-# GEMM Optimization Series in CUDA (Under Construction)
+# GEMM Optimization Series in CUDA
 
 This document is an indepth description and documentation of my attempt at optimizing General Matrix Multiplication (GEMM) kernels in CUDA. Some of the optimization techniques that I implemented include tiling, thread granularity coarsening, memory coalescing and corner turning, and bank-confict avoidance.
 
@@ -30,10 +30,49 @@ One must note that shared memory is much smaller than global memory, and can oft
 
 One must note that using shared memory and tiling has the added cost of thread synchronization. This is because all threads but finish storing data into shared memory before the partial dot product can be computed. Additionally, threads cannot move on to storing elements of the next tile into shared memory while other threads are still computing dot products. However, this tradeoff is still worth it in comparison to the naive matrix multiplication kernel due to the large overhead from repetitive reads from global memory.
 
+The tiled matrix multiplication implementation can be found at `src/matmul/tile_matmul.cuh`
+
 ## Thread Coarsening
+Organizing thread work at the finest granularity has the added benefits of easier scaling, and is easiest to implement in problems that are embarrassingly parallel. However, finer thread granularity can introduce additional overhead when threads have repetitive memory access patterns, or have lots of synchronization. We can reduce this added overhead from the tiled matrix multiplication example by increasing the amount of work each thread is responsible for. This is called thread coarsening. 
+
+In this project, I decided to implement 2D thread coarsening. In this case, each thread is responsible for computing a square of matrix elements in which the square has size length `COARSE_FACTOR`. One must note that the `TILE_SIZE` would increase quadratically based on `COARSE_FACTOR` with the same number of threads. Thus 2D thread coarsening has the effect of quadratically increasing the register usage for a block compared to a 1D example. In this way 2D thread coarsening makes the kernel much more hardware sensitive, as the coarsening factor has a much larger potential impact on SMs occupancy. In my case I found that a `BLOCK_SIZE` of `16` (256 threads) and a `COARSE_FACTOR` of `4` (16 output elements per thread) performed best on my RTX4060 laptop GPU. 
+
+The thread coarsened + tiled matrix multiplication implementation can be found at `src/matmul/thread_coarsened.cuh`
 
 ## Memory Coalescing
+Memory access to DRAM is faster when threads access adjacent elements of memory. This is called DRAM bursting. If we can organize thread accesses in a way such that adjacent threads access adjacent memory locations, we will benefit from faster memory access. Elements of multi dimensional arrays are stored in row-major order. This means that elements of the same row are stored consecutively and elements of the same column are stored 1 row length apart. Thus, organizing threads in a way such that adjacent threads access adjacent columns of your matrix will benefit from DRAM bursting. 
+
+One can observe that memory access to matrix B for native matrix multiplication is already coalesced. This is because two threads that are responsible for computing two adjacent elements of the same row in the output matrix would need to access all of the elements of adjacent columns in matrix B. Coalescing memory access to A is something that must be done manually since adjacent threads in a row of C access the same row of A. To expand on the thread coarsened kernel, I attempted to implement coalesced access for both matrix A and B by decoupling memory access and dot product computation.
+
+The given TILE. which is a square, would be partitioned to threads based on the thread's linear id, which is given by `threadIdx.y * BLOCK_SIZE + threadIdx.x`. The threads are then assigned to elements that correspond to adjacent elements based on their linear id in row-major format. However, this optimization required use of division `/` and modulo `%` in each linear iteration. The resulting kernel ended up having a lower throughput compared to the standard thread coarsened kernel.
+
+This implementation can be found at `src/matmul/coalesced_matmul.cuh`
 
 ## Other Optimizations
+There are many other optimizations that can be applied that have yet to be covered and have yet to be implemented. Some of the other optimizations I implemented consist of avoid bank conflicts, loop unrolling, and using `__restrict__` to allow for more aggressive optimizations. However, these had significantly less impact on the total throughput compared to the other optimizations. 
+
+A finalized kernel with some of these optimizations can be found at `src/matmul/peak_matmul.cuh`
+
+The results of each kernel discussed is shown below:
+Using GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Compute capability: 8.9
+cuBLAS initialized successfully
+==================================================
+     General Matrix Multiplication Kernels
+     Experimental throughput analysis
+      - RTX4060 GPU CUDA Kernels
+      - C++17
+     Project by: Jesse Kim
+==================================================
+Shape (M x N x K) Naive (TFLOPS)  Tiled (TFLOPS)  TC (TFLOPS)     Coalesced (TFLOPS)Peak (TFLOPS)   cuBLAS (TFLOPS)
+--------------------------------------------------------------------------------------------------
+256x256x256       0.629           0.798           1.828           1.079           1.796           2.139
+512x512x512       0.673           0.902           3.294           2.444           3.748           5.172
+1024x1024x1024    0.840           1.269           5.231           4.061           5.504           8.592
+2048x2048x2048    0.976           1.276           5.517           3.973           5.808           9.444
+4096x512x1024     0.973           1.268           5.308           4.158           5.578           9.057
+512x4096x2048     0.975           1.275           5.329           3.723           5.608           9.512
+
 
 ## Future Plans
+In the future I will attempt to implement double buffering and potentially make use of the GPU's tensor cores to further accelerate matrix multiplication kernels
