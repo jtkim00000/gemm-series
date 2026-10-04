@@ -31,8 +31,8 @@ __global__ void naiveMatmulKernel(
     int K
 ) {
 
-    int row{blockIdx.y * blockDim.y + threadIdx.y};
-    int col{blockIdx.x * blockDim.x + threadIdx.x};
+    int row{static_cast<int>(blockIdx.y) * static_cast<int>(blockDim.y) + static_cast<int>(threadIdx.y)};
+    int col{static_cast<int>(blockIdx.x) * static_cast<int>(blockDim.x) + static_cast<int>(threadIdx.x)};
 
     if((row >= M) || (col >= N)) 
         return;

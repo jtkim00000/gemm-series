@@ -16,7 +16,8 @@
 #include "matmul/naive_matmul.cuh"
 #include "matmul/tiled_matmul.cuh"
 #include "matmul/thread_coarsened_matmul.cuh"
-#include "matmul/memory_access_optimized_matmul.cuh"
+#include "matmul/coalesced_matmul.cuh"
+#include "matmul/peak_matmul.cuh"
 
 struct MatrixShape {
     int M;
@@ -75,7 +76,8 @@ int main() {
               << std::setw(16) << "Naive (TFLOPS)" 
               << std::setw(16) << "Tiled (TFLOPS)" 
               << std::setw(16) << "TC (TFLOPS)" 
-              << std::setw(16) << "MAO (TFLOPS)" 
+              << std::setw(16) << "Coalesced (TFLOPS)" 
+              << std::setw(16) << "Peak (TFLOPS)" 
               << std::setw(16) << "cuBLAS (TFLOPS)" << "\n";
     std::cout << std::string(98, '-') << "\n";
 
@@ -90,7 +92,7 @@ int main() {
 
     constexpr int BLOCK_SIZE{16};
     constexpr int COARSE_FACTOR{4};
-    constexpr int ITERS_PER_SHAPE{50};
+    constexpr int ITERS_PER_SHAPE{100};
 
     for (const auto& shape : test_shapes) {
         int M{shape.M};
@@ -129,8 +131,12 @@ int main() {
             threadCoarsenedMatmulGPU<BLOCK_SIZE, COARSE_FACTOR>(d_A, d_B, d_C, M, N, K);
         }, ITERS_PER_SHAPE);
 
-        double t_mao = benchmarkKernel([&]() {
-            memoryAccessOptimizedMatmulGPU<BLOCK_SIZE, COARSE_FACTOR>(d_A, d_B, d_C, M, N, K);
+        double t_coalesced = benchmarkKernel([&]() {
+            coalescedMatmulGPU<BLOCK_SIZE, COARSE_FACTOR>(d_A, d_B, d_C, M, N, K);
+        }, ITERS_PER_SHAPE);
+
+        double t_peak = benchmarkKernel([&]() {
+            peakMatmulGPU<BLOCK_SIZE, COARSE_FACTOR>(d_A, d_B, d_C, M, N, K);
         }, ITERS_PER_SHAPE);
 
         double t_cublas = benchmarkKernel([&]() {
@@ -146,7 +152,8 @@ int main() {
         double tflops_naive{(total_flops / t_naive) / 1e12};
         double tflops_tiled{(total_flops / t_tiled) / 1e12};
         double tflops_tc{(total_flops / t_tc) / 1e12};
-        double tflops_mao{(total_flops / t_mao) / 1e12};
+        double tflops_coalesced{(total_flops / t_coalesced) / 1e12};
+        double tflops_peak{(total_flops / t_peak) / 1e12};
         double tflops_cublas{(total_flops / t_cublas) / 1e12};
 
         std::string shape_str = std::to_string(M) + "x" + std::to_string(N) + "x" + std::to_string(K);
@@ -155,7 +162,8 @@ int main() {
                 << std::setw(16) << tflops_naive
                 << std::setw(16) << tflops_tiled
                 << std::setw(16) << tflops_tc
-                << std::setw(16) << tflops_mao
+                << std::setw(16) << tflops_coalesced
+                << std::setw(16) << tflops_peak
                 << std::setw(16) << tflops_cublas << "\n";
 
         cudaFree(d_A);

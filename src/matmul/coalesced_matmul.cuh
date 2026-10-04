@@ -1,12 +1,12 @@
-#ifndef MEMORY_ACCESS_OPTIMIZED_MATMUL_CUH
-#define MEMORY_ACCESS_OPTIMIZED_MATMUL_CUH
+#ifndef COALESCED_MATMUL_CUH
+#define COALESCED_MATMUL_CUH
 
 #include <iostream>
 #include <cuda_runtime.h>
 
 /*
     ==================================================
-        MEMORY ACCESS OPTIMIZED GEMM KERNEL
+        COALESCED GEMM KERNEL
     ==================================================
 
     A is an M x K matrix
@@ -41,16 +41,15 @@
     access overhead and corner tuning can more naturally be applied to 
     matrix A. Each one of the loops essentially figures out the tile
     of A or B that it is reponsible for loading, then uses linearized
-    thread ids to access those tiles in a coalesced manner. 
-
+    thread ids to access those tiles in a coalesced manner.
 
 */
 
 template <int BLOCK_SIZE, int COARSE_FACTOR>
-__global__ void memoryAccessOptimizedMatmulKernel(
-    const float* A, 
-    const float* B, 
-    float* C, 
+__global__ void coalescedMatmulKernel(
+    const float* __restrict__ A, 
+    const float* __restrict__ B, 
+    float* __restrict__ C, 
     const int M, 
     const int N,
     const int K
@@ -61,59 +60,64 @@ __global__ void memoryAccessOptimizedMatmulKernel(
     int by{static_cast<int>(blockIdx.y)};
 
     constexpr int TILE_WIDTH{BLOCK_SIZE * COARSE_FACTOR};
+    constexpr int NUM_THREADS{BLOCK_SIZE * BLOCK_SIZE};
 
     int row_start{TILE_WIDTH * by + ty * COARSE_FACTOR};
     int col_start{TILE_WIDTH * bx + tx * COARSE_FACTOR};
 
-    __shared__ float Ads[TILE_WIDTH][TILE_WIDTH];
-    __shared__ float Bds[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float Ads[TILE_WIDTH][TILE_WIDTH + 1];
+    __shared__ float Bds[TILE_WIDTH][TILE_WIDTH + 1];
 
-    float sums[COARSE_FACTOR*COARSE_FACTOR];  // row-major output sums
+    float sums[COARSE_FACTOR*COARSE_FACTOR]{0.0f};
 
-    for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
-        for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
-            sums[row_idx * COARSE_FACTOR + col_idx] = 0.0f;
-        }
-    }
+    int row_current{};
+    int col_current{};
 
-    //Decouple the tiling and FLOPs
-    int linear_thread_id = ty*BLOCK_SIZE + tx;
+    int linear_tid{ty * BLOCK_SIZE + tx};
+
+    int global_col_A{};
+    int global_row_A{};
+    int global_col_B{};
+    int global_row_B{};
 
     for(int tile_idx{}; tile_idx < ((K + TILE_WIDTH - 1) / TILE_WIDTH); ++tile_idx) {
 
-        for(int load_idx{}; load_idx < (COARSE_FACTOR*COARSE_FACTOR); ++load_idx) {
-            int s = linear_thread_id + load_idx * BLOCK_SIZE * BLOCK_SIZE;
-            int local_row = s / TILE_WIDTH;
-            int local_col = s % TILE_WIDTH;
+        int local_row{linear_tid / TILE_WIDTH};
+        int local_col{linear_tid % TILE_WIDTH};
 
-            int global_row = TILE_WIDTH * by + local_row;
-            int global_col = tile_idx * TILE_WIDTH + local_col;
+        #pragma unroll
+        for(int load_idx{}; load_idx < COARSE_FACTOR*COARSE_FACTOR; ++load_idx) {
 
-            if (global_row < M && global_col < K)
-                Ads[local_row][local_col] = A[global_row * K + global_col];
+            global_col_A = tile_idx * TILE_WIDTH + local_col;
+            global_row_A = by * TILE_WIDTH + local_row;
+
+            global_col_B = bx * TILE_WIDTH + local_col;
+            global_row_B = tile_idx * TILE_WIDTH + local_row;
+
+            if(global_row_A < M && global_col_A < K)
+                Ads[local_row][local_col] = A[global_row_A * K + global_col_A];
             else
                 Ads[local_row][local_col] = 0.0f;
-        }
 
-        for(int load_idx{}; load_idx < (COARSE_FACTOR*COARSE_FACTOR); ++load_idx) {
-            int s = linear_thread_id + load_idx * BLOCK_SIZE * BLOCK_SIZE;
-            int local_row = s / TILE_WIDTH;
-            int local_col = s % TILE_WIDTH;
-
-            int global_row = tile_idx * TILE_WIDTH + local_row;
-            int global_col = TILE_WIDTH * bx + local_col;
-
-            if (global_row < K && global_col < N)
-                Bds[local_row][local_col] = B[global_row * N + global_col];
+            if(global_row_B < K && global_col_B < N)
+                Bds[local_row][local_col] = B[global_row_B * N + global_col_B];
             else
                 Bds[local_row][local_col] = 0.0f;
+
+            local_col += NUM_THREADS;
+            while (local_col >= TILE_WIDTH) {
+                local_col -= TILE_WIDTH;
+                ++local_row;
+            }
         }
 
         __syncthreads();
 
-
+        #pragma unroll
         for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
+            #pragma unroll
             for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
+                #pragma unroll
                 for(int i{}; i < TILE_WIDTH; ++i) {
                     sums[row_idx * COARSE_FACTOR + col_idx] += Ads[ty * COARSE_FACTOR + row_idx][i] * Bds[i][tx * COARSE_FACTOR + col_idx];
                 }
@@ -124,10 +128,9 @@ __global__ void memoryAccessOptimizedMatmulKernel(
 
     }
 
-    int row_current{};
-    int col_current{};
-
+    #pragma unroll
     for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
+        #pragma unroll
         for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
             
             row_current = row_start + row_idx;
@@ -141,7 +144,7 @@ __global__ void memoryAccessOptimizedMatmulKernel(
 }
 
 template <int BLOCK_SIZE, int COARSE_FACTOR>
-void memoryAccessOptimizedMatmulGPU(
+void coalescedMatmulGPU(
     const float* A, 
     const float* B, 
     float* C, 
@@ -163,7 +166,7 @@ void memoryAccessOptimizedMatmulGPU(
         1
     );
 
-    memoryAccessOptimizedMatmulKernel<BLOCK_SIZE, COARSE_FACTOR><<<dimGrid, dimBlock>>>(
+    coalescedMatmulKernel<BLOCK_SIZE, COARSE_FACTOR><<<dimGrid, dimBlock>>>(
         A,
         B,
         C,
@@ -175,7 +178,7 @@ void memoryAccessOptimizedMatmulGPU(
     cudaError_t err{cudaGetLastError()};
 
     if(err != cudaSuccess)
-        std::cout << "Thread Coarsened Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
+        std::cout << "Coalexed Matmul Kernel Launch Error: " << cudaGetErrorString(err) << '\n';
 
 }
 

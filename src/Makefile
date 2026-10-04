@@ -31,7 +31,8 @@ main.o: main.cu \
 	matmul/naive_matmul.cuh \
 	matmul/tiled_matmul.cuh \
 	matmul/thread_coarsened_matmul.cuh \
-	matmul/memory_access_optimized_matmul.cuh
+	matmul/coalesced_matmul.cuh \
+	matmul/peak_matmul.cuh
 
 	$(NVCC) $(NVCCFLAGS) -c main.cu -o main.o
 
