@@ -53,26 +53,7 @@ There are many other optimizations that can be applied that have yet to be cover
 
 A finalized kernel with some of these optimizations can be found at `src/matmul/peak_matmul.cuh`
 
-The results of each kernel discussed is shown below:
-Using GPU: NVIDIA GeForce RTX 4060 Laptop GPU
-Compute capability: 8.9
-cuBLAS initialized successfully
-==================================================
-     General Matrix Multiplication Kernels
-     Experimental throughput analysis
-      - RTX4060 GPU CUDA Kernels
-      - C++17
-     Project by: Jesse Kim
-==================================================
-Shape (M x N x K) Naive (TFLOPS)  Tiled (TFLOPS)  TC (TFLOPS)     Coalesced (TFLOPS)Peak (TFLOPS)   cuBLAS (TFLOPS)
---------------------------------------------------------------------------------------------------
-256x256x256       0.629           0.798           1.828           1.079           1.796           2.139
-512x512x512       0.673           0.902           3.294           2.444           3.748           5.172
-1024x1024x1024    0.840           1.269           5.231           4.061           5.504           8.592
-2048x2048x2048    0.976           1.276           5.517           3.973           5.808           9.444
-4096x512x1024     0.973           1.268           5.308           4.158           5.578           9.057
-512x4096x2048     0.975           1.275           5.329           3.723           5.608           9.512
-
+The results of each kernel discussed can be found at `src/docs/profile_results.txt`
 
 ## Future Plans
 In the future I will attempt to implement double buffering and potentially make use of the GPU's tensor cores to further accelerate matrix multiplication kernels
