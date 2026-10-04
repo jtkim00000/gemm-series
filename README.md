@@ -54,6 +54,7 @@ There are many other optimizations that can be applied that have yet to be cover
 A finalized kernel with some of these optimizations can be found at `src/matmul/peak_matmul.cuh`
 
 The results of each kernel discussed can be found at `src/docs/profile_results.txt`
+![Figure_1](src/docs/Figure_1.png)
 
 ## Future Plans
 In the future I will attempt to implement double buffering and potentially make use of the GPU's tensor cores to further accelerate matrix multiplication kernels
