@@ -19,13 +19,17 @@
     The code below is for a GEMM kernel that attempts to maximize
     optimization using a combination of techniques from previous
     kernels and adds new, smaller optimizations. 
+
+    Coalescing memory access had the added price of division and
+    modulo operations, which actually caused a slowdown from the
+    standard thread coarsening.
 */
 
 template <int BLOCK_SIZE, int COARSE_FACTOR>
 __global__ void peakMatmulKernel(
-    const float* A, 
-    const float* B, 
-    float* C, 
+    const float* __restrict__ A, 
+    const float* __restrict__ B, 
+    float* __restrict__ C, 
     const int M, 
     const int N,
     const int K
@@ -79,13 +83,20 @@ __global__ void peakMatmulKernel(
 
         __syncthreads();
 
+        int sum_row{};
+        int sum_col{};
+        int sum_elem{};
+
         #pragma unroll
         for(int row_idx{}; row_idx < COARSE_FACTOR; ++row_idx) {
             #pragma unroll
             for(int col_idx{}; col_idx < COARSE_FACTOR; ++col_idx) {
+                sum_row = ty * COARSE_FACTOR + row_idx;
+                sum_col = tx * COARSE_FACTOR + col_idx;
+                sum_elem = row_idx * COARSE_FACTOR + col_idx;
                 #pragma unroll
                 for(int i{}; i < TILE_WIDTH; ++i) {
-                    sums[row_idx * COARSE_FACTOR + col_idx] += Ads[ty * COARSE_FACTOR + row_idx][i] * Bds[i][tx * COARSE_FACTOR + col_idx];
+                    sums[sum_elem] += Ads[sum_row][i] * Bds[i][sum_col];
                 }
             }
         }

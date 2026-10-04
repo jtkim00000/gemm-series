@@ -9,7 +9,7 @@ TARGET = gemm_benchmark
 # RTX 4060 Laptop = Compute Capability 8.9
 CUDA_ARCH = -arch=sm_89
 
-NVCCFLAGS = -O3 -std=c++17 $(CUDA_ARCH) -Xcompiler -Wall
+NVCCFLAGS = -O3 -std=c++17 $(CUDA_ARCH) -Xcompiler -Wall -Xptxas -v
 
 # CUDA 12.4 cuBLAS
 LIBS = -L/usr/lib/x86_64-linux-gnu -lcublas
